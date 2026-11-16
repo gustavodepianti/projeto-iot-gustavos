@@ -1,0 +1,15 @@
+# Credenciais
+firmware/include/secrets.h
+servidor/.env
+grafana/.env
+broker/passwd
+
+# Dados gerados pelos containers
+broker/data/
+broker/log/
+grafana/data/
+
+# Build e ambientes
+.pio/
+.venv/
+__pycache__/
