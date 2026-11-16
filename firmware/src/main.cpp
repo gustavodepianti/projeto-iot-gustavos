@@ -10,6 +10,13 @@ const int NUM_AMOSTRAS = 20;
 const unsigned long TEMPO_ESTABILIZAR_MS = 20;
 const unsigned long INTERVALO_LEITURA_MS = 2000;  // 2 s para testar
 
+// ---------- Calibração (valores brutos) ----------
+// Medida em 16/11/2026. Seco provisório: confirmar com terra seca.
+const int CAL_A_SECO = 4095;
+const int CAL_A_MOLHADO = 1412;
+const int CAL_B_SECO = 4095;
+const int CAL_B_MOLHADO = 1380;
+
 unsigned long ultimaLeitura = 0;
 
 // Faz a média de várias leituras de UM pino
@@ -35,6 +42,12 @@ void lerSensores(int &brutoA, int &mvA, int &brutoB, int &mvB) {
   digitalWrite(PINO_ALIMENTACAO, LOW);
 }
 
+// Converte o valor bruto em percentual relativo (0 % = seco, 100 % = molhado)
+float calcularPct(int bruto, int seco, int molhado) {
+  float pct = (float)(seco - bruto) / (seco - molhado) * 100.0f;
+  return constrain(pct, 0.0f, 100.0f);  // limita entre 0 e 100
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -55,7 +68,11 @@ void loop() {
     int brutoA, mvA, brutoB, mvB;
     lerSensores(brutoA, mvA, brutoB, mvB);
 
-    Serial.printf("A: %4d (%.2f V) | B: %4d (%.2f V)\n",
-                  brutoA, mvA / 1000.0, brutoB, mvB / 1000.0);
+    float pctA = calcularPct(brutoA, CAL_A_SECO, CAL_A_MOLHADO);
+    float pctB = calcularPct(brutoB, CAL_B_SECO, CAL_B_MOLHADO);
+
+    Serial.printf("A: %4d (%.2f V) %5.1f %% | B: %4d (%.2f V) %5.1f %%\n",
+                  brutoA, mvA / 1000.0, pctA,
+                  brutoB, mvB / 1000.0, pctB);
   }
 }
