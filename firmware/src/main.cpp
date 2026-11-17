@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <PubSubClient.h>
 #include "secrets.h"
 
 // ---------- Pinos ----------
@@ -15,16 +16,26 @@ const unsigned long INTERVALO_LEITURA_MS = 2000;  // 2 s para testar
 // ---------- Calibração (valores brutos) ----------
 // Medida em 16/11/2026. Seco provisório: confirmar com terra seca.
 const int CAL_A_SECO = 4095;
-const int CAL_A_MOLHADO = 1410;
+const int CAL_A_MOLHADO = 1410;   // <-- mantenha o valor que você mediu
 const int CAL_B_SECO = 4095;
 const int CAL_B_MOLHADO = 1380;
 
 // ---------- Wi-Fi ----------
-const unsigned long INTERVALO_WIFI_MS = 10000;  // nova tentativa a cada 10 s
+const unsigned long INTERVALO_WIFI_MS = 10000;
+
+// ---------- MQTT ----------
+const char* CLIENT_ID = "esp32-gustavos";
+const char* TOPICO_DADOS = "inatel/gustavos/dados";
+const char* TOPICO_STATUS = "inatel/gustavos/status";
+const unsigned long INTERVALO_MQTT_MS = 5000;  // nova tentativa a cada 5 s
+
+WiFiClient wifiClient;          // a conexão de rede (TCP)
+PubSubClient mqtt(wifiClient);  // o MQTT, que usa essa conexão
 
 unsigned long ultimaLeitura = 0;
 unsigned long ultimaTentativaWiFi = 0;
-bool estavaConectado = false;  // estado do Wi-Fi na volta anterior do loop
+unsigned long ultimaTentativaMqtt = 0;
+bool estavaConectado = false;
 
 // ================= Sensores =================
 
@@ -56,11 +67,9 @@ float calcularPct(int bruto, int seco, int molhado) {
 
 // ================= Wi-Fi =================
 
-// Confere o Wi-Fi a cada volta do loop, sem nunca esperar
 void verificarWiFi() {
   bool conectado = (WiFi.status() == WL_CONNECTED);
 
-  // Avisa só quando o estado MUDA
   if (conectado && !estavaConectado) {
     Serial.printf("Wi-Fi: conectado! IP: %s | sinal: %d dBm\n",
                   WiFi.localIP().toString().c_str(), WiFi.RSSI());
@@ -70,7 +79,6 @@ void verificarWiFi() {
   }
   estavaConectado = conectado;
 
-  // Desconectado e já passou o intervalo: tenta de novo
   if (!conectado && millis() - ultimaTentativaWiFi >= INTERVALO_WIFI_MS) {
     ultimaTentativaWiFi = millis();
     Serial.println("Wi-Fi: tentando conectar...");
@@ -79,6 +87,35 @@ void verificarWiFi() {
   }
 }
 
+// ================= MQTT =================
+
+void verificarMQTT() {
+  // Sem Wi-Fi não adianta tentar o MQTT
+  if (WiFi.status() != WL_CONNECTED) return;
+
+  // Conectado: só mantém a conexão viva
+  if (mqtt.connected()) {
+    mqtt.loop();
+    return;
+  }
+
+  // Desconectado: tenta de novo, no máximo a cada 5 s
+  if (millis() - ultimaTentativaMqtt < INTERVALO_MQTT_MS) return;
+  ultimaTentativaMqtt = millis();
+
+  Serial.println("MQTT: conectando...");
+  bool ok = mqtt.connect(CLIENT_ID, MQTT_USUARIO, MQTT_SENHA,
+                         TOPICO_STATUS, 0, true, "offline");  // Last Will
+
+  if (ok) {
+    Serial.println("MQTT: conectado!");
+    mqtt.publish(TOPICO_STATUS, "online", true);  // retido
+  } else {
+    Serial.printf("MQTT: falhou, codigo %d\n", mqtt.state());
+  }
+}
+
+// ================= Programa =================
 
 void setup() {
   Serial.begin(115200);
@@ -90,15 +127,18 @@ void setup() {
   analogSetPinAttenuation(PINO_SENSOR_A, ADC_11db);
   analogSetPinAttenuation(PINO_SENSOR_B, ADC_11db);
 
-  WiFi.mode(WIFI_STA);           // modo "cliente": conecta num roteador
-  WiFi.setAutoReconnect(false);  // a reconexão é feita pelo nosso código
+  WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(false);
   WiFi.begin(WIFI_SSID, WIFI_SENHA);
   ultimaTentativaWiFi = millis();
   Serial.println("Wi-Fi: conectando...");
+
+  mqtt.setServer(MQTT_HOST, MQTT_PORTA);
 }
 
 void loop() {
   verificarWiFi();
+  verificarMQTT();
 
   unsigned long agora = millis();
   if (agora - ultimaLeitura >= INTERVALO_LEITURA_MS) {
