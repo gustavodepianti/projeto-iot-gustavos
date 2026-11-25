@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 #include "secrets.h"
 
 // ---------- Pinos ----------
@@ -11,7 +12,7 @@ const int PINO_ALIMENTACAO = 23;
 // ---------- Parâmetros da leitura ----------
 const int NUM_AMOSTRAS = 20;
 const unsigned long TEMPO_ESTABILIZAR_MS = 20;
-const unsigned long INTERVALO_LEITURA_MS = 2000;  // 2 s para testar
+const unsigned long INTERVALO_LEITURA_MS = 60000;  // 60 s, como pede o projeto
 
 // ---------- Calibração (valores brutos) ----------
 // Medida em 16/11/2026. Seco provisório: confirmar com terra seca.
@@ -27,10 +28,10 @@ const unsigned long INTERVALO_WIFI_MS = 10000;
 const char* CLIENT_ID = "esp32-gustavos";
 const char* TOPICO_DADOS = "inatel/gustavos/dados";
 const char* TOPICO_STATUS = "inatel/gustavos/status";
-const unsigned long INTERVALO_MQTT_MS = 5000;  // nova tentativa a cada 5 s
+const unsigned long INTERVALO_MQTT_MS = 5000;
 
-WiFiClient wifiClient;          // a conexão de rede (TCP)
-PubSubClient mqtt(wifiClient);  // o MQTT, que usa essa conexão
+WiFiClient wifiClient;
+PubSubClient mqtt(wifiClient);
 
 unsigned long ultimaLeitura = 0;
 unsigned long ultimaTentativaWiFi = 0;
@@ -65,6 +66,11 @@ float calcularPct(int bruto, int seco, int molhado) {
   return constrain(pct, 0.0f, 100.0f);
 }
 
+// Arredonda para 1 casa decimal (ex.: 62.37 -> 62.4)
+float umaCasa(float valor) {
+  return roundf(valor * 10.0f) / 10.0f;
+}
+
 // ================= Wi-Fi =================
 
 void verificarWiFi() {
@@ -90,29 +96,50 @@ void verificarWiFi() {
 // ================= MQTT =================
 
 void verificarMQTT() {
-  // Sem Wi-Fi não adianta tentar o MQTT
   if (WiFi.status() != WL_CONNECTED) return;
 
-  // Conectado: só mantém a conexão viva
   if (mqtt.connected()) {
     mqtt.loop();
     return;
   }
 
-  // Desconectado: tenta de novo, no máximo a cada 5 s
   if (millis() - ultimaTentativaMqtt < INTERVALO_MQTT_MS) return;
   ultimaTentativaMqtt = millis();
 
   Serial.println("MQTT: conectando...");
   bool ok = mqtt.connect(CLIENT_ID, MQTT_USUARIO, MQTT_SENHA,
-                         TOPICO_STATUS, 0, true, "offline");  // Last Will
+                         TOPICO_STATUS, 0, true, "offline");
 
   if (ok) {
     Serial.println("MQTT: conectado!");
-    mqtt.publish(TOPICO_STATUS, "online", true);  // retido
+    mqtt.publish(TOPICO_STATUS, "online", true);
   } else {
     Serial.printf("MQTT: falhou, codigo %d\n", mqtt.state());
   }
+}
+
+// Monta o JSON e publica no tópico de dados
+void publicarLeituras(int brutoA, float pctA, int brutoB, float pctB) {
+  if (!mqtt.connected()) {
+    Serial.println("MQTT: desconectado, leitura nao publicada");
+    return;
+  }
+
+  JsonDocument doc;
+  doc["dispositivo"] = CLIENT_ID;
+  doc["projeto"] = "solo";
+
+  JsonObject leituras = doc["leituras"].to<JsonObject>();
+  leituras["solo_bruto"] = brutoA;          // sensor A: grandezas padrão
+  leituras["solo_pct"] = umaCasa(pctA);
+  leituras["solo_bruto_b"] = brutoB;        // sensor B: grandezas extras
+  leituras["solo_pct_b"] = umaCasa(pctB);
+
+  char payload[256];
+  serializeJson(doc, payload, sizeof(payload));
+
+  bool ok = mqtt.publish(TOPICO_DADOS, payload);  // não retido
+  Serial.printf("MQTT: %s -> %s\n", ok ? "publicado" : "FALHOU", payload);
 }
 
 // ================= Programa =================
@@ -134,6 +161,7 @@ void setup() {
   Serial.println("Wi-Fi: conectando...");
 
   mqtt.setServer(MQTT_HOST, MQTT_PORTA);
+  mqtt.setBufferSize(512);  // folga para o JSON
 }
 
 void loop() {
@@ -153,5 +181,7 @@ void loop() {
     Serial.printf("A: %4d (%.2f V) %5.1f %% | B: %4d (%.2f V) %5.1f %%\n",
                   brutoA, mvA / 1000.0, pctA,
                   brutoB, mvB / 1000.0, pctB);
+
+    publicarLeituras(brutoA, pctA, brutoB, pctB);
   }
 }
