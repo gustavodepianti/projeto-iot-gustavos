@@ -18,3 +18,9 @@ __pycache__/
 broker/config/passwd
 broker/data/
 broker/log/
+
+# Coletor: senhas, ambiente virtual e logs
+servidor/.env
+servidor/.venv/
+servidor/*.log
+__pycache__/
