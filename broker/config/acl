@@ -1,0 +1,13 @@
+# ESP32: só publica as leituras e o status
+user esp-gustavos
+topic write inatel/gustavos/dados
+topic write inatel/gustavos/status
+
+# Coletor Python: só lê as leituras e o status
+user leitor-gustavos
+topic read inatel/gustavos/dados
+topic read inatel/gustavos/status
+
+# Administrador (testes manuais): lê e publica em todo o projeto
+user admin-gustavos
+topic readwrite inatel/gustavos/#

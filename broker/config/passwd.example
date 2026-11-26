@@ -1,0 +1,9 @@
+# Usuários do broker (as senhas reais ficam só no arquivo passwd, fora do Git)
+#   esp-gustavos     -> ESP32 (publica)
+#   leitor-gustavos  -> coletor Python (lê)
+#   admin-gustavos   -> testes manuais (lê e publica)
+#
+# Para criar o passwd real na VM:
+#   mosquitto_passwd -c broker/config/passwd esp-gustavos
+#   mosquitto_passwd broker/config/passwd leitor-gustavos
+#   mosquitto_passwd broker/config/passwd admin-gustavos

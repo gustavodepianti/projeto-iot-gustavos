@@ -13,3 +13,8 @@ grafana/data/
 .pio/
 .venv/
 __pycache__/
+
+# Broker: senhas reais e pastas criadas pelo container
+broker/config/passwd
+broker/data/
+broker/log/
