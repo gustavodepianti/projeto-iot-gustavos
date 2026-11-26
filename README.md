@@ -21,7 +21,7 @@ Broker (porta 1883) e Grafana (3000) rodam em Docker; coletor, MySQL (3306) e AP
 | # | Requisito | Status |
 |---|---|---|
 | R1 | Leitura analógica com média de várias amostras | ✅ média de 20 amostras |
-| R2 | Calibração seco/molhado → `solo_pct` relativo | 🟡 ponto "seco" provisório |
+| R2 | Calibração seco/molhado → `solo_pct` relativo | ✅
 | R3 | Publica a cada 60 s; reconecta sozinho; status com Last Will | ✅ |
 | R4 | Broker em container, sem anônimo, senhas com hash e ACL | ⏳ |
 | R5 | Coletor valida e grava as grandezas | ⏳ |
